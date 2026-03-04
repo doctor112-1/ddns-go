@@ -8,6 +8,7 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -22,32 +23,30 @@ import (
 
 func exists() bool {
 	dir, err := os.UserHomeDir()
-	dir = dir + "/.ddns-go"
-	if err != nil {
-		log.Fatalf("err: %v", err)
-	}
+	dir = filepath.Join(dir, ".ddns-go")
+	checkErrFatal(err)
 
 	_, err = os.Stat(dir)
 	if err != nil {
 		return false
 	}
 
-	_, err = os.Stat(dir + "/peers")
+	_, err = os.Stat(filepath.Join(dir, "peers"))
 	if err != nil {
 		return false
 	}
 
-	_, err = os.Stat(dir + "/all-domains")
+	_, err = os.Stat(filepath.Join(dir, "all-domains"))
 	if err != nil {
 		return false
 	}
 
-	_, err = os.Stat(dir + "/domains")
+	_, err = os.Stat(filepath.Join(dir, "domains"))
 	if err != nil {
 		return false
 	}
 
-	_, err = os.Stat(dir + "/id")
+	_, err = os.Stat(filepath.Join(dir, "id"))
 	if err != nil {
 		return false
 	}
@@ -57,10 +56,8 @@ func exists() bool {
 
 func remove() {
 	dir, err := os.UserHomeDir()
-	if err != nil {
-		log.Fatalf("err: %v", err)
-	}
-	dir = dir + "/.ddns-go"
+	checkErrFatal(err)
+	dir = filepath.Join(dir, ".ddns-go")
 	os.RemoveAll(dir)
 }
 
@@ -68,19 +65,17 @@ var repeatedDomains []string
 
 func newStartup() {
 	dir, err := os.UserHomeDir()
-	if err != nil {
-		log.Fatalf("err: %v", err)
-	}
+	checkErrFatal(err)
+
 	remove()
+
 	err = os.Chdir(dir)
-	if err != nil {
-		log.Fatalf("error: %v", err)
-	}
+	checkErrFatal(err)
+
 	err = os.Mkdir(".ddns-go", 0o755)
-	if err != nil {
-		log.Fatalf("error: %v", err)
-	}
-	dir = dir + "/.ddns-go"
+	checkErrFatal(err)
+
+	dir = filepath.Join(dir, ".ddns-go")
 
 	id := generateID()
 
@@ -89,9 +84,7 @@ func newStartup() {
 	optsAllDomains := badger.DefaultOptions(dir + "/all-domains")
 	optsAllDomains.Logger = nil
 	dbAllDomains, err := badger.Open(optsAllDomains)
-	if err != nil {
-		log.Fatalf("error: %v", err)
-	}
+	checkErrFatal(err)
 	defer dbAllDomains.Close()
 
 	getAllDomains(listOfNodes, dbAllDomains)
@@ -102,9 +95,7 @@ func newStartup() {
 	optsPeers := badger.DefaultOptions(dir + "/peers")
 	optsPeers.Logger = nil
 	dbPeers, err := badger.Open(optsPeers)
-	if err != nil {
-		log.Fatalf("error: %v", err)
-	}
+	checkErrFatal(err)
 	defer dbPeers.Close()
 
 	getStartPeerIDS(listOfNodes, dbPeers)
@@ -113,9 +104,7 @@ func newStartup() {
 	optsDomains := badger.DefaultOptions(dir + "/domains")
 	optsDomains.Logger = nil
 	dbDomains, err := badger.Open(optsDomains)
-	if err != nil {
-		log.Fatalf("error %v", err)
-	}
+	checkErrFatal(err)
 	defer dbDomains.Close()
 
 	getCloseDomains(dbDomains, dbAllDomains, listOfNodes, highestDiff, lowestDiff, id)
@@ -171,9 +160,7 @@ func getCloseDomains(dbDomains *badger.DB, dbAllDomains *badger.DB, listOfNodes 
 					valStr = string(val)
 					return nil
 				})
-				if err != nil {
-					log.Fatalf("error: %v", err)
-				}
+				checkErrFatal(err)
 
 				domainBlock, _ := client.FetchDomain(context.Background(), &pb.Domain{Domain: string(key), Hash: valStr})
 				domainBlockByte, _ := proto.Marshal(domainBlock)
