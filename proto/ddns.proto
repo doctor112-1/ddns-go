@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+option go_package = "github.com/doctor112-1/ddns-go";
+
+service DdnsService {
+  rpc GetNodes (AskNodes) returns (stream Nodes) {}
+  rpc GetDomainList (Ask) returns (stream Domain) {}
+  rpc FetchDomain (Domain) returns (DomainBlock) {}
+  rpc AnnounceDomain (DomainBlock) returns (Confirmation) {}
+  rpc OutdatedDomain (Domain) returns (Confirmation) {}
+  rpc AnnounceID (PeerID) returns (Confirmation) {}
+  rpc GetID (Ask) returns (PeerID) {}
+  rpc UpdateDomainBlock (UpdatedDomainBlock) returns (Confirmation) {}
+  rpc PeersKnown (Ask) returns (NumOfPeersKnown) {}
+}
+
+message Ask {
+  bool ask = 1;
+}
+
+message Confirmation {
+  bool success = 1;
+  optional string error = 2;
+}
+
+message AskNodes {
+  uint32 numberOfNodes = 1;
+}
+
+message Nodes {
+  oneof message {
+    string ip = 1;
+    string error = 2;
+  }
+}
+
+message Domain {
+  string domain = 1;
+  string hash = 2;
+}
+
+message PeerID {
+  string id = 1;
+}
+
+message Blockheaders {
+  uint64 timestamp = 1;
+  uint32 nonce = 2;
+  uint32 target = 3;
+  string domainName = 4;
+}
+
+message DomainBlock {
+  Blockheaders blockheaders = 1;
+  string publicKey = 2;
+  optional string records = 3;
+}
+
+message UpdatedDomainBlock {
+  DomainBlock currentDomainBlock = 1;
+  DomainBlock updateDomainBlock = 2;
+  string signedHash = 3;
+}
+
+message NumOfPeersKnown {
+  uint32 num = 1;
+}
