@@ -81,8 +81,11 @@ func newStartup() {
 		log.Fatalf("error: %v", err)
 	}
 	dir = dir + "/.ddns-go"
+
 	id := generateID()
+
 	listOfNodes := fetchNodesSeedServer()
+
 	optsAllDomains := badger.DefaultOptions(dir + "/all-domains")
 	optsAllDomains.Logger = nil
 	dbAllDomains, err := badger.Open(optsAllDomains)
@@ -90,8 +93,10 @@ func newStartup() {
 		log.Fatalf("error: %v", err)
 	}
 	defer dbAllDomains.Close()
+
 	getAllDomains(listOfNodes, dbAllDomains)
 	sortAllDomains(dbAllDomains)
+	// we get highestDiff and lowestDiff from cleanDomains so we don't need to run a for loop and get it again
 	highestDiff, lowestDiff := cleanDomains(dbAllDomains, id)
 
 	optsPeers := badger.DefaultOptions(dir + "/peers")
@@ -101,7 +106,9 @@ func newStartup() {
 		log.Fatalf("error: %v", err)
 	}
 	defer dbPeers.Close()
+
 	getStartPeerIDS(listOfNodes, dbPeers)
+
 	// get close domains
 	optsDomains := badger.DefaultOptions(dir + "/domains")
 	optsDomains.Logger = nil
@@ -110,23 +117,14 @@ func newStartup() {
 		log.Fatalf("error %v", err)
 	}
 	defer dbDomains.Close()
+
 	getCloseDomains(dbDomains, dbAllDomains, listOfNodes, highestDiff, lowestDiff, id)
 }
 
 func getCloseDomains(dbDomains *badger.DB, dbAllDomains *badger.DB, listOfNodes []string, highestDiff *big.Int, lowestDiff *big.Int, peerID []byte) {
 	avgNum := 0
 	for _, addrNode := range listOfNodes {
-		var opts []grpc.DialOption
-
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-
-		conn, err := grpc.NewClient(addrNode, opts...)
-		if err != nil {
-			log.Printf("\033[31m Error: %v \033[0m", err)
-			return
-		}
-
-		client := pb.NewDdnsServiceClient(conn)
+		client, conn, err := connectAndVerify(addrNode)
 
 		num, err := client.PeersKnown(context.Background(), &pb.Ask{Ask: true})
 		if err != nil {
@@ -135,6 +133,7 @@ func getCloseDomains(dbDomains *badger.DB, dbAllDomains *badger.DB, listOfNodes 
 		}
 
 		avgNum += int(num.Num)
+		conn.Close()
 	}
 
 	// average amount of nodes known
@@ -155,8 +154,7 @@ func getCloseDomains(dbDomains *badger.DB, dbAllDomains *badger.DB, listOfNodes 
 			var err error
 
 			for _, addrNode := range listOfNodes {
-				conn, _ = grpc.NewClient(addrNode, opts...)
-				client = pb.NewDdnsServiceClient(conn)
+				client, conn, err = connectAndVerify(addrNode)
 				_, err = client.GetID(context.Background(), &pb.Ask{Ask: true})
 				if err == nil {
 					break
@@ -184,6 +182,7 @@ func getCloseDomains(dbDomains *badger.DB, dbAllDomains *badger.DB, listOfNodes 
 					return nil
 				})
 			}
+			conn.Close()
 			return nil
 		})
 	} else {
@@ -268,17 +267,12 @@ func getCloseDomains(dbDomains *badger.DB, dbAllDomains *badger.DB, listOfNodes 
 			}
 		}
 
-		var opts []grpc.DialOption
-
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-
 		var conn *grpc.ClientConn
 		var client pb.DdnsServiceClient
 		var err error
 
 		for _, addrNode := range listOfNodes {
-			conn, _ = grpc.NewClient(addrNode, opts...)
-			client = pb.NewDdnsServiceClient(conn)
+			client, conn, err = connectAndVerify(addrNode)
 			_, err = client.GetID(context.Background(), &pb.Ask{Ask: true})
 			if err == nil {
 				break
@@ -319,6 +313,7 @@ func getCloseDomains(dbDomains *badger.DB, dbAllDomains *badger.DB, listOfNodes 
 			}
 			return nil
 		})
+		conn.Close()
 	}
 }
 
@@ -333,23 +328,19 @@ func getStartPeerIDS(listOfNodes []string, db *badger.DB) {
 }
 
 func getPeerID(addrNode string) (peerID string) {
-	var opts []grpc.DialOption
-
-	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-
-	conn, err := grpc.NewClient(addrNode, opts...)
+	client, conn, err := connectAndVerify(addrNode)
 	if err != nil {
 		log.Printf("\033[31m Error: %v \033[0m", err)
 		return
 	}
-
-	client := pb.NewDdnsServiceClient(conn)
 
 	id, err := client.GetID(context.Background(), &pb.Ask{Ask: true})
 	if err != nil {
 		log.Printf("\033[31m Error: %v \033[0m", err)
 		return
 	}
+
+	conn.Close()
 
 	return id.Id
 }
@@ -471,17 +462,11 @@ func getAllDomains(listOfNodes []string, db *badger.DB) {
 // gets the domain list from an individual node
 func getDomainList(addrNode string, db *badger.DB) {
 	// TODO: validate blocks and make sure they don't contain things like &
-	var opts []grpc.DialOption
-
-	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-
-	conn, err := grpc.NewClient(addrNode, opts...)
+	client, conn, err := connectAndVerify(addrNode)
 	if err != nil {
 		log.Printf("\033[31m Error: %v \033[0m", err)
 		return
 	}
-
-	client := pb.NewDdnsServiceClient(conn)
 
 	stream, err := client.GetDomainList(context.Background(), &pb.Ask{Ask: true})
 	if err != nil {
@@ -541,10 +526,10 @@ func getDomainList(addrNode string, db *badger.DB) {
 			}
 			return nil
 		})
-		if err != nil {
-			log.Fatalf("error: %v", err)
-		}
+		checkErrFatal(err)
 	}
+
+	conn.Close()
 }
 
 // TODO: small network
@@ -553,21 +538,11 @@ func fetchNodesSeedServer() (listOfNodes []string) {
 		log.Fatalln("error: too many nodes")
 	}
 
-	var opts []grpc.DialOption
-
-	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-
-	conn, err := grpc.NewClient("localhost:3000", opts...)
-	if err != nil {
-		log.Fatalf("error: %v", err)
-	}
-
-	client := pb.NewDdnsServiceClient(conn)
+	client, conn, err := connectAndVerify("localhost:3000")
+	checkErrFatal(err)
 
 	stream, err := client.GetNodes(context.Background(), &pb.AskNodes{NumberOfNodes: uint32(*nodesToFetch)})
-	if err != nil {
-		log.Fatalf("error %v", err)
-	}
+	checkErrFatal(err)
 
 	for {
 		ip, err := stream.Recv()
@@ -575,9 +550,7 @@ func fetchNodesSeedServer() (listOfNodes []string) {
 			break
 		}
 
-		if err != nil {
-			log.Fatalf("error: %v", err)
-		}
+		checkErrFatal(err)
 
 		listOfNodes = append(listOfNodes, ip.GetIp())
 	}

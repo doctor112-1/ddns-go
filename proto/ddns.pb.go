@@ -218,13 +218,13 @@ func (x *Nodes) GetIp() string {
 	return ""
 }
 
-func (x *Nodes) GetError() string {
+func (x *Nodes) GetError() uint32 {
 	if x != nil {
 		if x, ok := x.Message.(*Nodes_Error); ok {
 			return x.Error
 		}
 	}
-	return ""
+	return 0
 }
 
 type isNodes_Message interface {
@@ -236,7 +236,8 @@ type Nodes_Ip struct {
 }
 
 type Nodes_Error struct {
-	Error string `protobuf:"bytes,2,opt,name=error,proto3,oneof"`
+	// 1 - too many nodes
+	Error uint32 `protobuf:"varint,2,opt,name=error,proto3,oneof"`
 }
 
 func (*Nodes_Ip) isNodes_Message() {}
@@ -587,7 +588,7 @@ const file_ddns_proto_rawDesc = "" +
 	"\rnumberOfNodes\x18\x01 \x01(\rR\rnumberOfNodes\"<\n" +
 	"\x05Nodes\x12\x10\n" +
 	"\x02ip\x18\x01 \x01(\tH\x00R\x02ip\x12\x16\n" +
-	"\x05error\x18\x02 \x01(\tH\x00R\x05errorB\t\n" +
+	"\x05error\x18\x02 \x01(\rH\x00R\x05errorB\t\n" +
 	"\amessage\"4\n" +
 	"\x06Domain\x12\x16\n" +
 	"\x06domain\x18\x01 \x01(\tR\x06domain\x12\x12\n" +

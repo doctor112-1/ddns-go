@@ -30,7 +30,8 @@ message AskNodes {
 message Nodes {
   oneof message {
     string ip = 1;
-    string error = 2;
+    // 1 - too many nodes
+    uint32 error = 2;
   }
 }
 

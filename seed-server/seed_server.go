@@ -19,7 +19,7 @@ type server struct {
 // TODO: small network
 func (s *server) GetNodes(in *pb.AskNodes, stream pb.DdnsService_GetNodesServer) error {
 	if in.NumberOfNodes > 9 {
-		if err := stream.Send(&pb.Nodes{Message: &pb.Nodes_Error{Error: "too many nodes requested"}}); err != nil {
+		if err := stream.Send(&pb.Nodes{Message: &pb.Nodes_Error{Error: 1}}); err != nil {
 			return err
 		}
 		return nil
