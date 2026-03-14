@@ -486,50 +486,52 @@ func getDomainList(addrNode string, db *badger.DB) {
 			return
 		}
 
-		// one db - key is domain name&&&hash, value is reputation&&&ipaddr
+		if verifyDomainList(domain) {
+			// one db - key is domain name&&&hash, value is reputation&&&ipaddr
 
-		err = db.Update(func(txn *badger.Txn) error {
-			item, _ := txn.Get([]byte(domain.Domain + "&&&" + domain.Hash))
-			if item == nil {
-				opts := badger.DefaultIteratorOptions
-				opts.PrefetchValues = false
-				dbIter := txn.NewIterator(opts)
-				defer dbIter.Close()
-				prefix := []byte(domain.Domain)
-				for dbIter.Seek(prefix); dbIter.ValidForPrefix(prefix); dbIter.Next() {
-					item := dbIter.Item()
+			err = db.Update(func(txn *badger.Txn) error {
+				item, _ := txn.Get([]byte(domain.Domain + "&&&" + domain.Hash))
+				if item == nil {
+					opts := badger.DefaultIteratorOptions
+					opts.PrefetchValues = false
+					dbIter := txn.NewIterator(opts)
+					defer dbIter.Close()
+					prefix := []byte(domain.Domain)
+					for dbIter.Seek(prefix); dbIter.ValidForPrefix(prefix); dbIter.Next() {
+						item := dbIter.Item()
 
-					if item != nil {
-						repeatedDomains = append(repeatedDomains, domain.Domain)
+						if item != nil {
+							repeatedDomains = append(repeatedDomains, domain.Domain)
+						}
 					}
-				}
-				txn.Set([]byte(domain.Domain+"&&&"+domain.Hash), []byte("1"+"&&&"+addrNode))
-			} else {
-				// increment reputation and add ip address at the end
-				itemVal := "a"
-				item.Value(func(val []byte) error {
-					itemVal = string(val)
-					return nil
-				})
+					txn.Set([]byte(domain.Domain+"&&&"+domain.Hash), []byte("1"+"&&&"+addrNode))
+				} else {
+					// increment reputation and add ip address at the end
+					itemVal := "a"
+					item.Value(func(val []byte) error {
+						itemVal = string(val)
+						return nil
+					})
 
-				if matched, _ := regexp.MatchString(addrNode, itemVal); !matched {
-					rep, err := strconv.Atoi(itemVal[0:1])
-					if err != nil {
-						return err
+					if matched, _ := regexp.MatchString(addrNode, itemVal); !matched {
+						rep, err := strconv.Atoi(itemVal[0:1])
+						if err != nil {
+							return err
+						}
+						rep++
+						itemVal = strconv.Itoa(rep) + itemVal[1:] + "&&&" + addrNode
+
+						txn.Set([]byte(domain.Domain+"&&&"+domain.Hash), []byte(itemVal))
 					}
-					rep++
-					itemVal = strconv.Itoa(rep) + itemVal[1:] + "&&&" + addrNode
 
-					txn.Set([]byte(domain.Domain+"&&&"+domain.Hash), []byte(itemVal))
 				}
+				return nil
+			})
+			checkErrFatal(err)
+		}
 
-			}
-			return nil
-		})
-		checkErrFatal(err)
+		conn.Close()
 	}
-
-	conn.Close()
 }
 
 // TODO: small network
