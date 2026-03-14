@@ -54,34 +54,24 @@ func exists() bool {
 	return true
 }
 
-func remove() {
-	dir, err := os.UserHomeDir()
-	checkErrFatal(err)
-	dir = filepath.Join(dir, ".ddns-go")
-	os.RemoveAll(dir)
-}
-
 var repeatedDomains []string
 
 func newStartup() {
 	dir, err := os.UserHomeDir()
 	checkErrFatal(err)
 
-	remove()
-
-	err = os.Chdir(dir)
-	checkErrFatal(err)
-
-	err = os.Mkdir(".ddns-go", 0o755)
-	checkErrFatal(err)
-
 	dir = filepath.Join(dir, ".ddns-go")
+
+	os.RemoveAll(dir)
+
+	err = os.Mkdir(dir, 0o755)
+	checkErrFatal(err)
 
 	id := generateID()
 
 	listOfNodes := fetchNodesSeedServer()
 
-	optsAllDomains := badger.DefaultOptions(dir + "/all-domains")
+	optsAllDomains := badger.DefaultOptions(filepath.Join(dir, "all-domains"))
 	optsAllDomains.Logger = nil
 	dbAllDomains, err := badger.Open(optsAllDomains)
 	checkErrFatal(err)
@@ -92,7 +82,7 @@ func newStartup() {
 	// we get highestDiff and lowestDiff from cleanDomains so we don't need to run a for loop and get it again
 	highestDiff, lowestDiff := cleanDomains(dbAllDomains, id)
 
-	optsPeers := badger.DefaultOptions(dir + "/peers")
+	optsPeers := badger.DefaultOptions(filepath.Join(dir, "peers"))
 	optsPeers.Logger = nil
 	dbPeers, err := badger.Open(optsPeers)
 	checkErrFatal(err)
@@ -101,7 +91,7 @@ func newStartup() {
 	getStartPeerIDS(listOfNodes, dbPeers)
 
 	// get close domains
-	optsDomains := badger.DefaultOptions(dir + "/domains")
+	optsDomains := badger.DefaultOptions(filepath.Join(dir, "/domains"))
 	optsDomains.Logger = nil
 	dbDomains, err := badger.Open(optsDomains)
 	checkErrFatal(err)
@@ -173,52 +163,6 @@ func getCloseDomains(dbDomains *badger.DB, dbAllDomains *badger.DB, listOfNodes 
 			return nil
 		})
 	} else {
-		/*
-			reference implementation
-			package main
-
-			import "log"
-
-			func main() {
-				upperBound := 9
-				lowerBound := 1
-				avgNode := 2
-				id := 1
-				space := (lowerBound + upperBound) / avgNode
-
-				var bounds [2]int
-
-				if id <= lowerBound {
-					bounds[0] = lowerBound
-					bounds[1] = lowerBound + space
-				}
-
-				if id >= upperBound {
-					bounds[0] = upperBound - space
-					bounds[1] = upperBound
-				}
-
-				for i := lowerBound; i < upperBound; i += space {
-					if (i <= id) && (id <= i+space) {
-						if (i + space) > upperBound {
-							rem := (i + space) - upperBound
-							bounds[0] = i - rem
-							bounds[1] = upperBound
-							break
-						} else {
-							bounds[0] = i
-							bounds[1] = i + space
-							break
-						}
-					}
-				}
-
-				log.Printf("id is %v", id)
-				log.Printf("lowerBound is %v", lowerBound)
-				log.Printf("upperBound is %v", upperBound)
-				log.Printf("nodes distance to fetch is %v", bounds)
-			}
-		*/
 
 		space := new(big.Int)
 		space = space.Add(lowestDiff, highestDiff)
